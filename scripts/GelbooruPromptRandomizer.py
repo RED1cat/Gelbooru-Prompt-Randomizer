@@ -5,13 +5,22 @@ from modules import scripts
 
 from scripts.Gel import Gelbooru
 
-async def get_random_tags(include, exclude):
+async def get_random_tags(include, exclude, current_prompt):
     include = include.replace(" ", "")
     exclude = exclude.replace(" ", "")
+
     if(include == "" and exclude == ""):
         gel_post = await Gelbooru().random_post()
+    elif(include != "" and exclude == ""):
+        gel_post = await Gelbooru().random_post(tags=include.split(','))
+    elif(include == "" and exclude != ""):
+        gel_post = await Gelbooru().random_post(exclude_tags=exclude.split(','))
     else:
         gel_post = await Gelbooru().random_post(tags=include.split(','), exclude_tags=exclude.split(','))
+
+    if gel_post == None:
+        return current_prompt, "Couldn't find a post with the specified tags"
+    
     return ', '.join(gel_post.get_tags()), gel_post
 
 class ExampleScript(scripts.Script):
@@ -35,9 +44,9 @@ class ExampleScript(scripts.Script):
         
         with contextlib.suppress(AttributeError):  # Ignore the error if the attribute is not present
             if is_img2img:
-                send_text_button.click(fn=get_random_tags, inputs=[include_tags_textbox, exclude_tags_textbox], outputs=[self.img2img, url_textbox])
+                send_text_button.click(fn=get_random_tags, inputs=[include_tags_textbox, exclude_tags_textbox, self.img2img], outputs=[self.img2img, url_textbox])
             else:
-                send_text_button.click(fn=get_random_tags, inputs=[include_tags_textbox, exclude_tags_textbox], outputs=[self.text2img, url_textbox])
+                send_text_button.click(fn=get_random_tags, inputs=[include_tags_textbox, exclude_tags_textbox, self.text2img], outputs=[self.text2img, url_textbox])
 
         return [send_text_button, include_tags_textbox, exclude_tags_textbox, url_textbox]
 
