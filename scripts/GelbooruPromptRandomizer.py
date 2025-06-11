@@ -28,14 +28,16 @@ async def get_random_tags(include, exclude, current_prompt):
     gel_post = await Gelbooru(api_key=api_key, user_id=user_id).random_post(tags=include, exclude_tags=exclude)
 
     if(gel_post == None or gel_post == []):
-        return current_prompt, "Couldn't find a post with the specified tags"
+        
+        return current_prompt, None, "Couldn't find a post with the specified tags"
     
     tags = gel_post.get_tags()
     for id in range(len(tags)):
         if(tags[id] not in getattr(shared.opts, "gpr_undersocreReplacementExclusionList").split(',')):
             tags[id] = tags[id].replace("_", " ")
 
-    return ', '.join(tags), gel_post
+    
+    return ', '.join(tags), gel_post.file_url, str(gel_post)
 
 class GPRScript(scripts.Script):
     
@@ -51,18 +53,32 @@ class GPRScript(scripts.Script):
     def ui(self, is_img2img):
         with gr.Accordion('Gelbooru Prompt Randomizer', open=False):
             with gr.Column():
-                send_text_button = gr.Button(value='Randomize', variant='primary', size='lg')
-                include_tags_textbox = gr.Textbox(label='Include Tags')
-                exclude_tags_textbox = gr.Textbox(label='Exclude Tags')
-                url_textbox = gr.Textbox(label='Url', show_copy_button=True, interactive=False)
-        
-        with contextlib.suppress(AttributeError):  # Ignore the error if the attribute is not present
-            if is_img2img:
-                send_text_button.click(fn=get_random_tags, inputs=[include_tags_textbox, exclude_tags_textbox, self.img2img], outputs=[self.img2img, url_textbox])
-            else:
-                send_text_button.click(fn=get_random_tags, inputs=[include_tags_textbox, exclude_tags_textbox, self.text2img], outputs=[self.text2img, url_textbox])
 
-        return [send_text_button, include_tags_textbox, exclude_tags_textbox, url_textbox]
+                
+                preview_image = gr.Image(label="Anteprima Immagine Casuale", interactive=False, show_label=True, height=400)
+                
+                with gr.Row():
+                    send_text_button = gr.Button(value='Randomize', variant='primary', size='sm')
+                    clear_button = gr.Button(value='Clear Preview', size='sm')
+
+                include_tags_textbox = gr.Textbox(label='Include Tags', placeholder="es: 1girl, blue_hair, solo")
+                exclude_tags_textbox = gr.Textbox(label='Exclude Tags', placeholder="es: nsfw, text, watermark")
+                
+                url_textbox = gr.Textbox(label='Post URL', show_copy_button=True, interactive=False)
+
+        with contextlib.suppress(AttributeError):
+            outputs_list = [self.text2img if not is_img2img else self.img2img, preview_image, url_textbox]
+            inputs_list = [include_tags_textbox, exclude_tags_textbox, self.text2img if not is_img2img else self.img2img]
+
+            send_text_button.click(
+                fn=get_random_tags, 
+                inputs=inputs_list, 
+                outputs=outputs_list
+            )
+            
+            clear_button.click(fn=lambda: (None, None), inputs=None, outputs=[preview_image, url_textbox])
+
+        return [send_text_button, clear_button, include_tags_textbox, exclude_tags_textbox, preview_image, url_textbox]
     
     def on_ui_settings():
         GPR_SECTION = ("gpr", "Gelbooru Prompt Randomizer")
@@ -71,7 +87,6 @@ class GPRScript(scripts.Script):
             "gpr_anonymous_user": shared.OptionInfo(True, "Anonymous", gr.Checkbox),
             "gpr_api_key": shared.OptionInfo("", "api_key", gr.Textbox).info("<a href=\"https://gelbooru.com/index.php?page=account&s=options\" target=\"_blank\">Account Options</a>"),
             "gpr_user_id": shared.OptionInfo("", "user_id", gr.Textbox).info("<a href=\"https://gelbooru.com/index.php?page=account&s=options\" target=\"_blank\">Account Options</a>"),
-            #Taken from a1111-sd-webui-tagcomplete
             "gpr_replaceUnderscores": shared.OptionInfo(True, "Replace underscores with spaces on insertion"),
             "gpr_undersocreReplacementExclusionList": shared.OptionInfo("0_0,(o)_(o),+_+,+_-,._.,<o>_<o>,<|>_<|>,=_=,>_<,3_3,6_9,>_o,@_@,^_^,o_o,u_u,x_x,|_|,||_||", "Underscore replacement exclusion list").info("Add tags that shouldn't have underscores replaced with spaces, separated by comma."),
         }
