@@ -236,8 +236,10 @@ class Gelbooru:
         async with aiohttp.ClientSession(loop=self._loop) as session:
             status_code, response = await self._fetch(session, url)
 
-        if status_code not in [200, 201]:
-            raise GelbooruException(f"""Gelbooru returned a non 200 status code: {response}""")
+        if status_code == 401:
+            raise GelbooruException("Gelbooru returned 401 status code, you need to log in to your account")
+        elif status_code not in [200, 201]:
+            raise GelbooruException(f"Gelbooru returned a non 200 status code: {response}, code is: {status_code}")
 
         return response
 
