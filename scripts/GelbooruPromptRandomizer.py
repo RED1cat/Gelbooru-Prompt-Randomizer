@@ -1,9 +1,30 @@
 import contextlib
+import io
 
+import aiohttp
 import gradio as gr
+from PIL import Image
 from modules import scripts, shared, script_callbacks
 
 from scripts.Gel import Gelbooru
+
+
+async def _fetch_image(url):
+    if not url:
+        return None
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://gelbooru.com/",
+        }
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return None
+                data = await response.read()
+        return Image.open(io.BytesIO(data))
+    except Exception:
+        return None
 
 async def get_random_tags(include, exclude):
     include = include.replace(" ", "")
@@ -24,18 +45,28 @@ async def get_random_tags(include, exclude):
     else:
         exclude = exclude.split(',')
 
+    blacklist_raw = getattr(shared.opts, "gpr_universalBlacklist", "") or ""
+    blacklist = [t.strip().lower().replace(" ", "_") for t in blacklist_raw.split(',') if t.strip()]
+    if blacklist:
+        exclude = (exclude or []) + blacklist
+
     gel_post = await Gelbooru(api_key=api_key, user_id=user_id).random_post(tags=include, exclude_tags=exclude)
 
     if(gel_post == None or gel_post == []):
         return "Couldn't find a post with the specified tags", None, "Couldn't find a post with the specified tags"
-    
+
     tags = gel_post.get_tags()
+    if blacklist:
+        blacklist_set = set(blacklist)
+        tags = [t for t in tags if t.lower() not in blacklist_set]
     for id in range(len(tags)):
         if(tags[id] not in getattr(shared.opts, "gpr_undersocreReplacementExclusionList").split(',')):
             tags[id] = tags[id].replace("_", " ")
 
-    
-    return ', '.join(tags), gel_post.file_url, str(gel_post)
+
+    image = await _fetch_image(gel_post.file_url)
+
+    return ', '.join(tags), image, str(gel_post)
 
 class GPRScript(scripts.Script):
     
@@ -85,6 +116,7 @@ class GPRScript(scripts.Script):
             # Taken from a1111-sd-webui-tagcomplete
             "gpr_replaceUnderscores": shared.OptionInfo(True, "Replace underscores with spaces on insertion"),
             "gpr_undersocreReplacementExclusionList": shared.OptionInfo("0_0,(o)_(o),+_+,+_-,._.,<o>_<o>,<|>_<|>,=_=,>_<,3_3,6_9,>_o,@_@,^_^,o_o,u_u,x_x,|_|,||_||", "Underscore replacement exclusion list").info("Add tags that shouldn't have underscores replaced with spaces, separated by comma."),
+            "gpr_universalBlacklist": shared.OptionInfo("", "Universal tag blacklist").info("Tags listed here are always excluded from results and stripped from the returned tag list, in addition to the per-run Exclude Tags. Separate with commas (e.g. nsfw, text, watermark)."),
         }
 
         for key, opt, in gpr_options.items():
