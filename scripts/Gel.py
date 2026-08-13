@@ -83,7 +83,7 @@ class Gelbooru:
                  user_id: Optional[str] = None,
                  loop: Optional[asyncio.AbstractEventLoop] = None,
                  api: Optional[str] = API_GELBOORU,
-                 display_all_content: bool = True):
+                 display_all_content: bool = False):
         """
         API credentials can be obtained here (registration required):
         https://gelbooru.com/index.php?page=account&s=options
