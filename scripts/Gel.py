@@ -82,7 +82,8 @@ class Gelbooru:
     def __init__(self, api_key: Optional[str] = None,
                  user_id: Optional[str] = None,
                  loop: Optional[asyncio.AbstractEventLoop] = None,
-                 api: Optional[str] = API_GELBOORU):
+                 api: Optional[str] = API_GELBOORU,
+                 display_all_content: bool = False):
         """
         API credentials can be obtained here (registration required):
         https://gelbooru.com/index.php?page=account&s=options
@@ -96,6 +97,7 @@ class Gelbooru:
         self._user_id = user_id
         self._loop = loop
         self._base_url = api
+        self._display_all_content = display_all_content
 
     async def get_post(self, post_id: int) -> Optional[GelbooruImage]:
         """
@@ -153,10 +155,21 @@ class Gelbooru:
         if not count:
             return None
 
-        # Otherwise, let's pull a random ID from the number of posts
-        offset = randint(0, min(count, 20000))
+        # Try up to 5 random posts until we get a non-video result
+        for _ in range(min(count, 5)):
+            offset = randint(0, min(count, 20000))
 
-        return await self.search_posts(tags=tags, exclude_tags=exclude_tags, limit=1, page=offset)
+            result = await self.search_posts(
+                tags=tags,
+                exclude_tags=exclude_tags,
+                limit=1,
+                page=offset
+            )
+
+            if result:
+                return result
+
+        return None
 
     async def search_posts(self, *, tags: Optional[List[str]] = None,
                            exclude_tags: Optional[List[str]] = None,
@@ -191,13 +204,25 @@ class Gelbooru:
             return []
 
         # Single results are not returned as arrays/lists and need to be processed directly instead of iterated
-        result = [GelbooruImage(p, self) for p in payload['posts']['post']] \
-            if isinstance(payload['posts']['post'], list) \
-            else [GelbooruImage(payload['posts']['post'], self)]
+        video_extensions = ('.webm', '.mp4', '.mov', '.avi', '.mkv')
+
+        if isinstance(payload['posts']['post'], list):
+            result = [
+                GelbooruImage(p, self)
+                for p in payload['posts']['post']
+                if not str(p.get('file_url', '')).lower().endswith(video_extensions)
+            ]
+        else:
+            post = payload['posts']['post']
+
+            if str(post.get('file_url', '')).lower().endswith(video_extensions):
+                return []
+
+            result = [GelbooruImage(post, self)]
 
         # Return the first result if we have a limit of 1 explicitly set
         if limit == 1:
-            return result[0]
+            return result[0] if result else []
         else:
             return result
 
@@ -233,7 +258,15 @@ class Gelbooru:
         return tags + exclude_tags
 
     async def _request(self, url: str) -> bytes:
-        async with aiohttp.ClientSession(loop=self._loop) as session:
+        cookies = {}
+
+        if self._display_all_content:
+            cookies["fringeBenefits"] = "yup"
+
+        async with aiohttp.ClientSession(
+            loop=self._loop,
+            cookies=cookies
+        ) as session:
             status_code, response = await self._fetch(session, url)
 
         if status_code == 401:

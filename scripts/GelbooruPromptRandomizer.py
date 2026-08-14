@@ -31,6 +31,7 @@ async def get_random_tags(include, exclude):
     exclude = exclude.replace(" ", "")
     api_key = getattr(shared.opts, "gpr_api_key", None)
     user_id = getattr(shared.opts, "gpr_user_id", None)
+    display_all_content = getattr(shared.opts, "gpr_displayAllContent", False)
 
     if(api_key == "" or user_id == ""):
         return "You need to log in to your gelbooru account", None, "You need to log in to your gelbooru account"
@@ -50,7 +51,7 @@ async def get_random_tags(include, exclude):
     if blacklist:
         exclude = (exclude or []) + blacklist
 
-    gel_post = await Gelbooru(api_key=api_key, user_id=user_id).random_post(tags=include, exclude_tags=exclude)
+    gel_post = await Gelbooru(api_key=api_key, user_id=user_id, display_all_content=display_all_content).random_post(tags=include, exclude_tags=exclude)
 
     if(gel_post == None or gel_post == []):
         return "Couldn't find a post with the specified tags", None, "Couldn't find a post with the specified tags"
@@ -113,6 +114,7 @@ class GPRScript(scripts.Script):
         gpr_options = {
             "gpr_api_key": shared.OptionInfo("", "api_key", gr.Textbox).info("<a href=\"https://gelbooru.com/index.php?page=account&s=options\" target=\"_blank\">Account Options</a>"),
             "gpr_user_id": shared.OptionInfo("", "user_id", gr.Textbox).info("<a href=\"https://gelbooru.com/index.php?page=account&s=options\" target=\"_blank\">Account Options</a>"),
+            "gpr_displayAllContent": shared.OptionInfo(False, "Display all site content").info("Enable Gelbooru's 'Display all site content' option."),
             # Taken from a1111-sd-webui-tagcomplete
             "gpr_replaceUnderscores": shared.OptionInfo(True, "Replace underscores with spaces on insertion"),
             "gpr_undersocreReplacementExclusionList": shared.OptionInfo("0_0,(o)_(o),+_+,+_-,._.,<o>_<o>,<|>_<|>,=_=,>_<,3_3,6_9,>_o,@_@,^_^,o_o,u_u,x_x,|_|,||_||", "Underscore replacement exclusion list").info("Add tags that shouldn't have underscores replaced with spaces, separated by comma."),
